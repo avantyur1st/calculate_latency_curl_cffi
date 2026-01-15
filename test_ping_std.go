@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"log"
@@ -33,15 +34,23 @@ func calculatePercentile(data []float64, percentile float64) float64 {
 }
 
 // measureLatency измеряет задержку для указанного URL
-func measureLatency(url string, numTests int, delay time.Duration) {
+func measureLatency(url string, numTests int, delay time.Duration, insecure bool) {
 	// Создаём HTTP клиент с разумными таймаутами
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+	}
+
+	// Если установлен флаг insecure, отключаем проверку SSL-сертификата
+	if insecure {
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		fmt.Println("⚠️  SSL certificate verification is disabled")
+	}
+
 	client := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 10,
-			IdleConnTimeout:     90 * time.Second,
-		},
+		Timeout:   30 * time.Second,
+		Transport: transport,
 	}
 
 	// Прогревочный запрос (игнорируем его время)
@@ -113,6 +122,7 @@ func main() {
 	url := flag.String("url", "", "The URL to test (with parameters if needed)")
 	numTests := flag.Int("num_tests", 5, "Number of tests to run (after warm-up)")
 	delaySeconds := flag.Float64("delay", 1.0, "Delay in seconds between requests")
+	insecure := flag.Bool("insecure", false, "Skip SSL certificate verification (insecure)")
 
 	flag.Parse()
 
@@ -125,5 +135,5 @@ func main() {
 	}
 
 	delay := time.Duration(*delaySeconds * float64(time.Second))
-	measureLatency(*url, *numTests, delay)
+	measureLatency(*url, *numTests, delay, *insecure)
 }
